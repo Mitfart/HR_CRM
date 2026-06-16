@@ -48,7 +48,7 @@ This repository contains an HR CRM for an agency: a FastAPI backend, Next.js fro
 
 ## User Preferences
 
-- After sufficiently large changes, create a pull request instead of leaving the work only as local changes.
+- After every subsequent user request that results in repository changes, prepare/push the branch and send a pull request instead of leaving the work only as local changes.
 
 ## Child DOX Index
 
