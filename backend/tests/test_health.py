@@ -3,6 +3,13 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 
+def test_crm_health_does_not_depend_on_raw_legacy_rows():
+    """Sync health must not depend on the removed raw_legacy_rows table."""
+    from app.routers import crm_health
+
+    assert "RawLegacyRow" not in vars(crm_health)
+
+
 # ── _inspect_celery ───────────────────────────────────────────────────────────
 
 def test_inspect_celery_reachable():
