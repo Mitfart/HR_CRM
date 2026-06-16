@@ -3,16 +3,48 @@ import io
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from pydantic import BaseModel
 from sqlalchemy import and_, cast, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_manager
+from app.models.app_setting import AppSetting
 from app.models.candidate import Candidate
 from app.models.user import User
+from app.services.activity_history import append_activity_event
+from app.services.office_operations_store import create_deletion_request_record
+from app.services.office_policy import can_hard_delete
 from app.schemas.candidate import CandidateCreate, CandidateOut, CandidateUpdate
 
 router = APIRouter()
+
+
+class AiInterviewIn(BaseModel):
+    profession: str
+    candidate_name: str
+    answers: dict[str, str]
+    contacts: dict[str, str] | None = None
+
+
+def _extract_int(text: str | None) -> int | None:
+    if not text:
+        return None
+    import re
+    m = re.search(r"\d+", text)
+    return int(m.group(0)) if m else None
+
+
+def _extract_salary(text: str | None) -> tuple[float | None, float | None]:
+    if not text:
+        return None, None
+    import re
+    nums = [float(x.replace(" ", "")) for x in re.findall(r"\d[\d ]*", text)]
+    if not nums:
+        return None, None
+    if len(nums) == 1:
+        return nums[0], None
+    return nums[0], nums[1]
 
 
 @router.get("", response_model=list[CandidateOut])
@@ -204,17 +236,49 @@ async def update_candidate(
     return obj
 
 
-@router.delete("/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{candidate_id}")
 async def delete_candidate(
     candidate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_manager),
+    current_user: User = Depends(require_manager),
 ):
     result = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
     obj = result.scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    if not can_hard_delete(current_user.role, "candidate"):
+        request = await create_deletion_request_record(
+            db,
+            actor=current_user,
+            entity_type="candidate",
+            entity_id=str(candidate_id),
+            reason="Запрос на удаление кандидата из CRM",
+        )
+        await append_activity_event(
+            db,
+            actor=current_user,
+            category="employee",
+            action="deletion_request_created",
+            entity_type="candidate",
+            entity_id=str(candidate_id),
+            details={"request_id": request["id"], "candidate_name": obj.full_name},
+        )
+        return {
+            "status": "deletion_requested",
+            "request_id": request["id"],
+            "detail": "Полное удаление кандидата доступно только администратору.",
+        }
     await db.delete(obj)
+    await append_activity_event(
+        db,
+        actor=current_user,
+        category="employee",
+        action="candidate_deleted",
+        entity_type="candidate",
+        entity_id=str(candidate_id),
+        details={"candidate_name": obj.full_name},
+    )
+    return {"status": "deleted", "candidate_id": str(candidate_id)}
 
 
 @router.post("/import")
@@ -288,3 +352,76 @@ async def import_candidates_csv(
         created += 1
 
     return {"created": created, "errors": errors}
+
+
+@router.post("/ai-interview", response_model=CandidateOut, status_code=status.HTTP_201_CREATED)
+async def ai_interview_create_candidate(
+    data: AiInterviewIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager),
+):
+    profession = data.profession.strip().lower()
+    name = data.candidate_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="candidate_name required")
+
+    row = await db.get(AppSetting, "ai_profession_questionnaires_v1")
+    questionnaires = row.value if row and isinstance(row.value, dict) else {}
+    questionnaire = questionnaires.get(profession, [])
+
+    answers = {k.strip(): (v or "").strip() for k, v in (data.answers or {}).items() if k.strip()}
+    flat = " ".join([f"{k}: {v}" for k, v in answers.items()])
+
+    age = _extract_int(answers.get("возраст") or answers.get("age") or flat)
+    exp = _extract_int(answers.get("опыт") or answers.get("experience") or flat)
+    salary_min, salary_max = _extract_salary(answers.get("зарплата") or answers.get("salary") or flat)
+
+    availability = answers.get("доступность") or answers.get("availability")
+    specialization = profession
+    tags = [profession, "ai_interview", "auto_resume"]
+
+    resume_lines = [
+        f"Профессия: {profession}",
+        f"Кандидат: {name}",
+        f"Возраст: {age if age is not None else 'не указан'}",
+        f"Опыт: {exp if exp is not None else 'не указан'}",
+        f"Ожидания по зарплате: {salary_min or '—'} - {salary_max or '—'}",
+        f"Доступность: {availability or 'не указана'}",
+        "",
+        "Ответы по опроснику:",
+    ]
+    if questionnaire:
+        for q in questionnaire:
+            a = answers.get(q) or "—"
+            resume_lines.append(f"- {q}: {a}")
+    else:
+        for q, a in answers.items():
+            resume_lines.append(f"- {q}: {a}")
+
+    notes = "\n".join(resume_lines)
+
+    obj = Candidate(
+        full_name=name,
+        age=age,
+        specialization=specialization,
+        experience_years=exp,
+        salary_min=salary_min,
+        salary_max=salary_max,
+        availability=availability,
+        contacts=data.contacts or None,
+        tags=tags,
+        notes=notes,
+    )
+    db.add(obj)
+    await db.flush()
+    await db.refresh(obj)
+    await append_activity_event(
+        db,
+        actor=current_user,
+        category="ai",
+        action="ai_interview_resume_created",
+        entity_type="candidate",
+        entity_id=str(obj.id),
+        details={"profession": profession, "candidate_name": name, "questions_count": len(questionnaire)},
+    )
+    return obj

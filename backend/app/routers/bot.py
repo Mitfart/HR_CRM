@@ -16,6 +16,7 @@ from app.models.app_setting import AppSetting
 from app.models.bot_message import BotMessage
 from app.models.user import User
 from app.routers.ws import notify_application
+from app.services.deletion_history import append_deletion_event
 
 BOT_TASK_QUEUE = "bot:tasks:telegram"
 BOT_SCRIPTS_KEY = "bot_scripts"
@@ -75,6 +76,7 @@ async def update_bot_scripts(
     _: User = Depends(require_admin),
 ):
     """Admin-only: persist bot question script to DB."""
+    old_scripts = await _load_scripts(db)
     row = await db.get(AppSetting, BOT_SCRIPTS_KEY)
     if row:
         row.value = scripts
@@ -82,6 +84,25 @@ async def update_bot_scripts(
         row = AppSetting(key=BOT_SCRIPTS_KEY, value=scripts)
         db.add(row)
     await db.flush()
+
+    removed_questions = {
+        (x.get("question") or "").strip()
+        for x in old_scripts
+        if isinstance(x, dict) and (x.get("question") or "").strip()
+    } - {
+        (x.get("question") or "").strip()
+        for x in scripts
+        if isinstance(x, dict) and (x.get("question") or "").strip()
+    }
+    for q in removed_questions:
+        await append_deletion_event(
+            db,
+            actor=_,
+            entity_type="bot_script",
+            entity_id=BOT_SCRIPTS_KEY,
+            action="script_question_removed",
+            details={"question": q},
+        )
     return {"message": "Scripts updated", "count": len(scripts)}
 
 

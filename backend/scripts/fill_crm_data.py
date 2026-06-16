@@ -15,6 +15,7 @@ Run:
 import re
 import sys
 import uuid
+import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -38,6 +39,10 @@ from app.models.crm_task import Task
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 db_url = settings.database_url.replace("+asyncpg", "")
 engine = create_engine(db_url, pool_pre_ping=True)
+SEED_MANAGER_PASSWORD = os.environ.get("CRM_SEED_MANAGER_PASSWORD", "")
+
+if not SEED_MANAGER_PASSWORD:
+    raise RuntimeError("CRM_SEED_MANAGER_PASSWORD is required")
 
 # ── Manager definitions ───────────────────────────────────────────────────────
 
@@ -45,32 +50,32 @@ MANAGERS = [
     {
         "full_name": "Нурия Сагитова",
         "email": "nuriya@goodpeople.agency",
-        "password": "GoodPeople2026!",
+        "password": SEED_MANAGER_PASSWORD,
         # All name variants in deals
         "aliases": ["нурия", "нустя"],
     },
     {
         "full_name": "Анастасия Козлова",
         "email": "nastya@goodpeople.agency",
-        "password": "GoodPeople2026!",
+        "password": SEED_MANAGER_PASSWORD,
         "aliases": ["настя", "макс/настя"],
     },
     {
         "full_name": "Анна Хабирова",
         "email": "anya.hab@goodpeople.agency",
-        "password": "GoodPeople2026!",
+        "password": SEED_MANAGER_PASSWORD,
         "aliases": ["аня хаб", "аня хаб", "анна хаб"],
     },
     {
         "full_name": "Валерия Смирнова",
         "email": "lera@goodpeople.agency",
-        "password": "GoodPeople2026!",
+        "password": SEED_MANAGER_PASSWORD,
         "aliases": ["лера"],
     },
     {
         "full_name": "Анна Одинцова",
         "email": "anya@goodpeople.agency",
-        "password": "GoodPeople2026!",
+        "password": SEED_MANAGER_PASSWORD,
         "aliases": ["аня", "аня оди"],
     },
 ]

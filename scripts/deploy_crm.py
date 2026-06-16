@@ -4,9 +4,12 @@ import os
 
 HOST = "62.181.53.36"
 USER = "root"
-PASSWORD = "gtkmvtyb2314"
+PASSWORD = os.environ.get("CRM_DEPLOY_PASSWORD", "")
 REMOTE_ROOT = "/root/CRM"
 LOCAL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if not PASSWORD:
+    raise RuntimeError("CRM_DEPLOY_PASSWORD is required")
 
 FILES_TO_UPLOAD = [
     # Backend models

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
+    "dev:with-backend": "docker compose -f ../../docker-compose.yml up -d postgres redis backend && next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "next lint"

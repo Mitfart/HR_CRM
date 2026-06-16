@@ -16,6 +16,10 @@ router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 def create_access_token(subject: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {"sub": subject, "role": role, "exp": expire}
@@ -24,7 +28,8 @@ def create_access_token(subject: str, role: str) -> str:
 
 @router.post("/login", response_model=TokenOut)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == data.email))
+    normalized_email = normalize_email(data.email)
+    result = await db.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
     if not user or not pwd_context.verify(data.password, user.hashed_password):
         raise HTTPException(
@@ -50,14 +55,15 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Self-registration is available only for 'client' and 'candidate' roles",
         )
-    result = await db.execute(select(User).where(User.email == data.email))
+    normalized_email = normalize_email(data.email)
+    result = await db.execute(select(User).where(User.email == normalized_email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
     user = User(
-        email=data.email,
+        email=normalized_email,
         full_name=data.full_name,
         hashed_password=pwd_context.hash(data.password),
         role=data.role,
