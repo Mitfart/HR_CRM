@@ -28,6 +28,7 @@ This repository contains an HR CRM for an agency: a FastAPI backend, Next.js fro
 
 - Do not revert unrelated working-tree changes.
 - Keep secrets and credentials out of source; `.env`, Google credentials, Telegram sessions, and certificates are runtime inputs.
+- Keep local agent/tool settings out of source; `.claude/` is a local workspace directory.
 - Prefer existing domain names and Russian CRM terminology already present in UI and tests.
 - Generated caches and build outputs such as `__pycache__`, `.DS_Store`, `Parser/build`, `Parser/dist`, and virtualenv contents are not product source.
 

@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.celery_app import celery_app
 from app.database import get_db
 from app.dependencies import require_admin, require_manager
-from app.models.raw_legacy_row import RawLegacyRow
 from app.models.sync_error import SyncError
 from app.models.user import User
 
@@ -105,27 +104,15 @@ async def sync_health(
     """Return Google Sheets sync status summary (manager+).
 
     Reports:
-    - Last successful ingest timestamp
-    - Counts by parse_status in last 24 h
+    - Legacy ingest counters as empty compatibility fields
     - Open (unresolved) sync errors count by error_code
     - Recent error samples
     """
     now = datetime.now(timezone.utc)
     since_24h = now - timedelta(hours=24)
 
-    # Last ingested row timestamp
-    last_ingest_row = await db.execute(
-        select(func.max(RawLegacyRow.ingested_at))
-    )
-    last_ingest_at: datetime | None = last_ingest_row.scalar_one_or_none()
-
-    # Counts by parse_status in last 24 h
-    status_counts_q = await db.execute(
-        select(RawLegacyRow.parse_status, func.count())
-        .where(RawLegacyRow.ingested_at >= since_24h)
-        .group_by(RawLegacyRow.parse_status)
-    )
-    parse_status_counts = {row[0]: row[1] for row in status_counts_q.all()}
+    last_ingest_at: datetime | None = None
+    parse_status_counts: dict[str, int] = {}
 
     # Open sync errors by error_code
     open_errors_q = await db.execute(
