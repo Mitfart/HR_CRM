@@ -1,16 +1,8 @@
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    @field_validator("telegram_api_id", mode="before")
-    @classmethod
-    def _empty_str_to_zero(cls, v: object) -> object:
-        if v == "" or v is None:
-            return 0
-        return v
 
     # App
     app_name: str = "CRM Agency API"
@@ -26,12 +18,6 @@ class Settings(BaseSettings):
     # JWT
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 8  # 8 hours
-
-    # Telegram UserBot (MTProto via Telethon)
-    telegram_api_id: int = 0
-    telegram_api_hash: str = ""
-    telegram_phone: str = ""
-    telegram_session: str = ""  # StringSession — генерируется при первом запуске
 
     # WhatsApp (Green API)
     green_api_instance: str = ""

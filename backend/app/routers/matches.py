@@ -28,8 +28,6 @@ async def create_matches(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_manager),
 ):
-    from app.tasks import notify_candidates
-
     created = []
     for candidate_id in data.candidate_ids:
         # Skip duplicates (same application + candidate)
@@ -47,9 +45,6 @@ async def create_matches(
         await db.flush()
         await db.refresh(obj)
         created.append(obj)
-
-    if created:
-        notify_candidates.delay([str(m.id) for m in created])
 
     return created
 
@@ -103,7 +98,7 @@ async def send_match_to_client(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_manager),
 ):
-    """Отправляет конкретного согласованного кандидата клиенту через Telegram-бот."""
+    """Marks a candidate as approved for the client; Telegram runtime is disabled."""
     result = await db.execute(
         select(Match)
         .where(Match.id == match_id)
@@ -118,23 +113,10 @@ async def send_match_to_client(
     match.responded_at = datetime.now(timezone.utc)
     await db.flush()
 
-    # Notify client via bot queue
     app_obj: Application = match.application
     candidate: Candidate = match.candidate
-    client_tg = app_obj.telegram_username
 
-    if client_tg:
-        from app.tasks import notify_client_about_candidate
-        notify_client_about_candidate.delay(
-            str(app_obj.id),
-            client_tg,
-            candidate.full_name,
-            candidate.specialization,
-            candidate.experience_years,
-            float(candidate.salary_min) if candidate.salary_min is not None else None,
-        )
-
-    return {"status": "sent", "match_id": str(match_id), "candidate": candidate.full_name}
+    return {"status": "client_approved", "match_id": str(match_id), "candidate": candidate.full_name}
 
 
 @router.post("/application/{application_id}/send-all-to-client")
@@ -143,7 +125,7 @@ async def send_all_accepted_to_client(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_manager),
 ):
-    """Отправляет клиенту всех соискателей со статусом 'accepted' по данной заявке."""
+    """Marks all accepted candidates as approved for the client; Telegram runtime is disabled."""
     # Load application
     app_result = await db.execute(select(Application).where(Application.id == application_id))
     app_obj = app_result.scalar_one_or_none()
@@ -187,17 +169,8 @@ async def send_all_accepted_to_client(
             parts.append(f"от {int(c.salary_min):,} ₽".replace(",", " "))
         lines.append("• " + ", ".join(parts))
 
-    client_tg = app_obj.telegram_username
-    if client_tg:
-        from app.tasks import notify_client_with_candidates_list
-        notify_client_with_candidates_list.delay(
-            str(application_id),
-            client_tg,
-            lines,
-        )
-
     return {
-        "status": "sent_to_client",
+        "status": "client_approved",
         "application_id": str(application_id),
         "candidates_sent": len(accepted_matches),
     }

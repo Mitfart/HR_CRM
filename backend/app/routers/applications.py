@@ -27,13 +27,10 @@ from app.schemas.application import ApplicationCreate, ApplicationOut, Applicati
 from app.schemas.candidate import CandidateOut
 from app.schemas.match import MatchOut
 from app.services.activity_history import append_activity_event
-from app.tasks import trigger_bot_for_application
-from redis.asyncio import Redis
 
 router = APIRouter()
 DOCS_ROOT = Path("/tmp/crm_uploads")
 DOCS_ROOT.mkdir(parents=True, exist_ok=True)
-BOT_TASK_QUEUE = "bot:tasks:telegram"
 
 
 class SearchParams(BaseModel):
@@ -65,7 +62,7 @@ class MeetingCreateIn(BaseModel):
     use_permanent_link: bool = False
     send_to_client: bool = True
     send_to_candidate: bool = False
-    channel_for_send: Optional[str] = "telegram"
+    channel_for_send: Optional[str] = None
 
 
 class MeetingPatchIn(BaseModel):
@@ -158,25 +155,6 @@ async def _notify_client_mirror_update(
     )
 
 
-async def _queue_telegram_send(application_id: uuid.UUID, telegram_username: str, text: str) -> None:
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
-    try:
-        import json
-        await redis.lpush(
-            BOT_TASK_QUEUE,
-            json.dumps(
-                {
-                    "type": "send_message",
-                    "application_id": str(application_id),
-                    "telegram_username": telegram_username,
-                    "text": text,
-                }
-            ),
-        )
-    finally:
-        await redis.aclose()
-
-
 # Public: submit a new application (from the website form)
 @router.post("", response_model=ApplicationOut, status_code=status.HTTP_201_CREATED)
 async def create_application(data: ApplicationCreate, db: AsyncSession = Depends(get_db)):
@@ -184,11 +162,6 @@ async def create_application(data: ApplicationCreate, db: AsyncSession = Depends
     db.add(app_obj)
     await db.flush()
     await db.refresh(app_obj)
-
-    trigger_bot_for_application.delay(
-        str(app_obj.id),
-        app_obj.telegram_username,
-    )
 
     return app_obj
 
@@ -696,23 +669,12 @@ async def create_meeting(
         db.add(AppSetting(key=_meetings_key(application_id), value=items))
     await _upsert_client_mirror_section(db, application_id, "meetings", items)
 
-    # Send link to client via bot channel where possible.
-    if body.send_to_client and app_obj.telegram_username:
-        text = f"Ссылка на онлайн-встречу: {meeting_link}"
-        db.add(BotMessage(application_id=application_id, channel="telegram", direction="outgoing", text=text))
-        await _queue_telegram_send(application_id, app_obj.telegram_username, text)
-
     # Candidate link sending is tracked as event placeholder for adapter implementation.
     if body.send_to_candidate and body.candidate_id:
         cand = (await db.execute(select(Candidate).where(Candidate.id == uuid.UUID(body.candidate_id)))).scalar_one_or_none()
         candidate_contacts = cand.contacts if cand and isinstance(cand.contacts, dict) else {}
         c_text = f"Ссылка на онлайн-встречу: {meeting_link}"
         sent_any = False
-        tg = (candidate_contacts.get("telegram") or "").strip()
-        if tg:
-            db.add(BotMessage(application_id=application_id, channel="telegram", direction="outgoing", text=f"[to-candidate] {c_text}"))
-            await _queue_telegram_send(application_id, tg, c_text)
-            sent_any = True
         wa = (candidate_contacts.get("whatsapp") or "").strip()
         if wa:
             db.add(BotMessage(application_id=application_id, channel="whatsapp", direction="outgoing", text=f"[to-candidate] {c_text}"))
@@ -730,9 +692,9 @@ async def create_meeting(
             entity_id=meeting_id,
             details={
                 "candidate_id": body.candidate_id,
-                "channel": body.channel_for_send or "telegram",
+                "channel": body.channel_for_send or "disabled",
                 "sent_any": sent_any,
-                "telegram": bool(tg),
+                "telegram": False,
                 "whatsapp": bool(wa),
                 "email": bool(em),
             },

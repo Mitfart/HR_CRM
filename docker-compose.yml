@@ -79,22 +79,6 @@ services:
       - ./backend/google_credentials.json:/app/google_credentials.json:ro
     command: celery -A app.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler
 
-  bot:
-    build:
-      context: .
-      dockerfile: bot/Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      API_URL: http://backend:8000
-    depends_on:
-      redis:
-        condition: service_healthy
-      backend:
-        condition: service_started
-    volumes:
-      - .:/app
-
   frontend:
     build:
       context: ./frontend/site

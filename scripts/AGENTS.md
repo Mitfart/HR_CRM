@@ -2,13 +2,12 @@
 
 ## Purpose
 
-Root-level scripts own operational helpers for scraping, CRM deployment, Telegram bot startup, and data import workflows outside the main app packages.
+Root-level scripts own operational helpers for scraping, CRM deployment, and data import workflows outside the main app packages.
 
 ## Ownership
 
 - `deploy_crm.py` and `deploy_to_server.py` own deployment helpers.
 - `friendwork_scraper.py` owns FriendWork scraping/import preparation.
-- `run_telegram_bot.*` owns local bot startup shortcuts.
 
 ## Local Contracts
 
