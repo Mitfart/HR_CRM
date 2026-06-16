@@ -8,8 +8,9 @@ import clsx from "clsx";
 const NAV_LINKS = [
   { label: "О нас", href: "/#about" },
   { label: "Услуги", href: "/#services" },
-  { label: "Luxury", href: "/luxury" },
-  { label: "Условия", href: "/#conditions" },
+  { label: "Процесс", href: "/#process" },
+  { label: "Офисы", href: "/#offices" },
+  { label: "Статьи", href: "/#articles" },
   { label: "Контакты", href: "/#contacts" },
 ];
 

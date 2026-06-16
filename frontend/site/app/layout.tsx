@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GoodPeople Agency — Подбор домашнего персонала в Москве",
+  title: "GoodPeople Agency — конфиденциальный подбор private staff по всему миру",
   description:
-    "Профессиональный подбор домашнего персонала: няни, домработницы, водители, повара, гувернантки и VIP-сервис. Опыт, образование, рекомендации.",
-  keywords: "подбор персонала, няня, домработница, кадровое агентство, Москва",
+    "Премиальный подбор домашнего, семейного и private staff персонала: няни, гувернантки, домработницы, повара, водители, управляющие, ассистенты и команды для резиденций.",
+  keywords: "private staff, домашний персонал, няня, гувернантка, домработница, family office, подбор персонала, Москва, Дубай, Европа",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

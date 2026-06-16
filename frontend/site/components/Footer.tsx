@@ -13,7 +13,7 @@ export default function Footer() {
               <span className="text-white/60 text-xs tracking-widest uppercase ml-1">Agency</span>
             </div>
             <p className="text-white/60 text-sm leading-relaxed">
-              Профессиональный подбор домашнего персонала в Москве. Просто хорошие люди.
+              Конфиденциальный подбор домашнего, семейного и private staff персонала для клиентов в России и по всему миру.
             </p>
           </div>
 
@@ -21,9 +21,9 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-4 text-white/90">Услуги</h4>
             <ul className="space-y-2 text-sm text-white/60">
-              {["Luxury private staff", "Няни", "Домработницы", "Водители", "Повара", "Гувернантки", "Сиделки"].map((s) => (
+              {["Private staff", "Няни и гувернантки", "Домработницы", "Водители", "Повара", "Управляющие", "Ассистенты"].map((s) => (
                 <li key={s}>
-                  <Link href={s === "Luxury private staff" ? "/luxury" : "/#services"} className="hover:text-brand-gold transition-colors">{s}</Link>
+                  <Link href="/#services" className="hover:text-brand-gold transition-colors">{s}</Link>
                 </li>
               ))}
             </ul>
@@ -33,11 +33,21 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-4 text-white/90">Компания</h4>
             <ul className="space-y-2 text-sm text-white/60">
-              {["О нас", "Условия работы", "Отзывы", "Блог"].map((s) => (
-                <li key={s}>
-                  <Link href="#" className="hover:text-brand-gold transition-colors">{s}</Link>
-                </li>
-              ))}
+              <li>
+                <Link href="/#about" className="hover:text-brand-gold transition-colors">О нас</Link>
+              </li>
+              <li>
+                <Link href="/#process" className="hover:text-brand-gold transition-colors">Как мы работаем</Link>
+              </li>
+              <li>
+                <Link href="/#offices" className="hover:text-brand-gold transition-colors">Карта офисов</Link>
+              </li>
+              <li>
+                <Link href="/#articles" className="hover:text-brand-gold transition-colors">Статьи</Link>
+              </li>
+              <li>
+                <Link href="/luxury" className="hover:text-brand-gold transition-colors">Luxury page</Link>
+              </li>
             </ul>
           </div>
 

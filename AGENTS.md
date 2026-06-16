@@ -23,6 +23,7 @@ This repository contains an HR CRM for an agency: a FastAPI backend, Next.js fro
 - `scripts/` owns root-level operational import/deploy helpers.
 - `nginx/` owns reverse-proxy configuration and certificate mounts.
 - Root docs and compose files own repository-wide setup, deployment, and product context.
+- `docs/` owns durable design, product, implementation, and research documentation that should outlive a single agent turn.
 
 ## Local Contracts
 
@@ -58,3 +59,4 @@ This repository contains an HR CRM for an agency: a FastAPI backend, Next.js fro
 - `Parser/AGENTS.md` - standalone parser GUI, extractor script, macOS launcher, and packaged build outputs.
 - `scripts/AGENTS.md` - root operational scripts for imports, scraping, deployment, and bot startup helpers.
 - `nginx/AGENTS.md` - reverse-proxy configuration and TLS mount expectations.
+- `docs/AGENTS.md` - durable design, product, research, and implementation documentation.
