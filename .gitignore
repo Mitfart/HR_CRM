@@ -24,6 +24,7 @@ alembic/versions/*.pyc
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -43,9 +44,16 @@ Thumbs.db
 
 # Local browser session profile
 .playwright-friendwork-profile/
+Parser/.venv-mac/
+Parser/build/
+Parser/dist/
+Parser/Parser.exe
 
 # Uploads / temp
 uploads/
+backend/tmp/
+backend/celerybeat-schedule
+*.jsonl
 *.csv
 *.xlsx
 docx_content.txt

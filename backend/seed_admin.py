@@ -3,7 +3,7 @@ Seed script: creates the default admin user.
 
 Credentials:
   Email    : admin@goodpeople.agency
-  Password : GoodPeople2026!
+  Password : set CRM_ADMIN_PASSWORD in the environment
 
 Run inside the backend container:
   docker compose exec backend python seed_admin.py
@@ -25,13 +25,16 @@ DATABASE_URL = os.environ.get(
 )
 
 ADMIN_EMAIL = "admin@goodpeople.agency"
-ADMIN_PASSWORD = "GoodPeople2026!"
+ADMIN_PASSWORD = os.environ.get("CRM_ADMIN_PASSWORD", "")
 ADMIN_FULL_NAME = "Администратор"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def seed():
+    if not ADMIN_PASSWORD:
+        raise RuntimeError("CRM_ADMIN_PASSWORD is required")
+
     engine = create_async_engine(DATABASE_URL, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -50,7 +53,7 @@ async def seed():
                     is_active=True,
                 )
                 session.add(admin)
-                print(f"✅ Создан администратор: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
+                print(f"✅ Создан администратор: {ADMIN_EMAIL}")
 
     await engine.dispose()
 

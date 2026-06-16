@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
     applications,
+    deals,
     candidates,
     matches,
     bot,
@@ -15,6 +16,11 @@ from app.routers import (
     crm_notifications,
     crm_audit_log,
     crm_health,
+    hr_time,
+    deletions,
+    history,
+    client_portal,
+    office_operations,
 )
 from app.routers import calendar, contracts
 
@@ -44,6 +50,7 @@ app.add_middleware(
 # Core API
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
+app.include_router(deals.router, prefix="/api/deals", tags=["deals"])
 app.include_router(candidates.router, prefix="/api/candidates", tags=["candidates"])
 app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
 app.include_router(bot.router, prefix="/api/bot", tags=["bot"])
@@ -60,6 +67,11 @@ app.include_router(contracts.router, prefix="/api/contracts", tags=["contracts"]
 app.include_router(crm_notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(crm_audit_log.router, prefix="/api/audit-log", tags=["audit-log"])
 app.include_router(crm_health.router, prefix="/api/health", tags=["health"])
+app.include_router(hr_time.router, prefix="/api/hr-time", tags=["hr-time"])
+app.include_router(deletions.router, prefix="/api/deletions", tags=["deletions"])
+app.include_router(history.router, prefix="/api/history", tags=["history"])
+app.include_router(client_portal.router, prefix="/api/client", tags=["client-portal"])
+app.include_router(office_operations.router, prefix="/api/office-operations", tags=["office-operations"])
 
 
 @app.get("/api/health", tags=["health"])

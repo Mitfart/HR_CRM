@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (err) {
     console.error("[POST /api/auth/login]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Backend is unavailable. Please start backend server and try again." },
+      { status: 503 },
+    );
   }
 }

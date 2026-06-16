@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import re
 import tempfile
@@ -10,8 +11,8 @@ from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 import shlex
 
-import pandas as pd
 from bs4 import BeautifulSoup
+from openpyxl import Workbook
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
 PRINT_LOCK = threading.Lock()
@@ -539,19 +540,45 @@ def scrape_profile_page(
     )
 
 
-def save_records_checkpoint(records: List[PageRecord], output_path: str) -> None:
-    """Write Excel after each listing (pagination) page so progress survives crashes or early stop."""
-    if not records:
+def append_record_jsonl(jsonl_path: str, record: PageRecord) -> None:
+    row = record.as_flat_dict()
+    with open(jsonl_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def iter_jsonl_rows(jsonl_path: str):
+    if not os.path.exists(jsonl_path):
+        return
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                yield row
+
+
+def save_records_checkpoint(jsonl_path: str, records_count: int, output_path: str) -> None:
+    """Write Excel after each listing page so progress survives crashes or early stop."""
+    if records_count <= 0:
         return
     try:
-        save_to_excel(records, output_path)
+        save_to_excel(jsonl_path, records_count, output_path)
     except Exception as exc:
         log_line(f"Warning: could not write Excel checkpoint ({output_path}): {exc}")
 
 
 def run_scraper(cfg: ScraperConfig) -> None:
     """One browser window: listing stays on the main tab; each profile opens as another tab (same context)."""
-    records: List[PageRecord] = []
+    output_dir = os.path.dirname(cfg.output_file) or "."
+    os.makedirs(output_dir, exist_ok=True)
+    fd, jsonl_path = tempfile.mkstemp(prefix="._records_", suffix=".jsonl", dir=output_dir)
+    os.close(fd)
+    records_count = 0
     try:
         with sync_playwright() as p:
             browser = create_browser(p, cfg)
@@ -571,7 +598,7 @@ def run_scraper(cfg: ScraperConfig) -> None:
             current_page_index = 1
             # Enough listing steps when few profiles appear per page or the site has many index pages.
             max_listing_steps = max(10_000, cfg.max_pages * 50)
-            while len(records) < cfg.max_pages and current_page_index <= max_listing_steps:
+            while records_count < cfg.max_pages and current_page_index <= max_listing_steps:
                 current_url = page.url
                 try:
                     links = extract_links(page, cfg.link_pattern, current_url)
@@ -589,9 +616,9 @@ def run_scraper(cfg: ScraperConfig) -> None:
 
                 batch_links: List[str] = []
                 for link in links:
-                    if len(records) >= cfg.max_pages:
+                    if records_count >= cfg.max_pages:
                         break
-                    remaining = cfg.max_pages - len(records)
+                    remaining = cfg.max_pages - records_count
                     if remaining <= 0:
                         break
                     if link in discovered:
@@ -608,19 +635,20 @@ def run_scraper(cfg: ScraperConfig) -> None:
                         f"  -> Opening {len(batch_links)} profile page(s) as new tabs in the same browser window..."
                     )
                     for link in batch_links:
-                        if len(records) >= cfg.max_pages:
+                        if records_count >= cfg.max_pages:
                             break
                         try:
                             record = scrape_profile_page(context, current_url, link, cfg)
-                            records.append(record)
-                            log_line(f"__PROGRESS__ {len(records)} {cfg.max_pages}")
+                            append_record_jsonl(jsonl_path, record)
+                            records_count += 1
+                            log_line(f"__PROGRESS__ {records_count} {cfg.max_pages}")
                         except Exception as exc:
                             log_line(f"    !! Failed to read {link}: {exc}")
 
                 # One Excel checkpoint per listing page (after all profiles for this page are done).
-                save_records_checkpoint(records, cfg.output_file)
+                save_records_checkpoint(jsonl_path, records_count, cfg.output_file)
 
-                if len(records) >= cfg.max_pages:
+                if records_count >= cfg.max_pages:
                     log_line("Reached max page limit.")
                     break
 
@@ -655,45 +683,63 @@ def run_scraper(cfg: ScraperConfig) -> None:
 
             context.close()
             browser.close()
-            log_line(f"\nDone. Saved {len(records)} records to {cfg.output_file}")
+            log_line(f"\nDone. Saved {records_count} records to {cfg.output_file}")
     finally:
         try:
-            save_to_excel(records, cfg.output_file)
+            save_to_excel(jsonl_path, records_count, cfg.output_file)
         except Exception as exc:
             log_line(f"Warning: could not write Excel file ({cfg.output_file}): {exc}")
+        finally:
+            if os.path.exists(jsonl_path):
+                os.unlink(jsonl_path)
 
 
 def _cell_is_blank(val: object) -> bool:
-    if pd.isna(val):
+    if val is None:
         return True
+    if isinstance(val, str):
+        return val.strip() == ""
     return str(val).strip() == ""
 
 
-def save_to_excel(records: List[PageRecord], output_path: str) -> None:
-    rows = [r.as_flat_dict() for r in records]
-    if not rows and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+def save_to_excel(jsonl_path: str, records_count: int, output_path: str) -> None:
+    if records_count <= 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         log_line(
             f"No records collected; keeping existing Excel file unchanged: {output_path}"
         )
         return
-    if not rows:
-        rows = [{"message": "No records found"}]
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        if "target_url" in df.columns:
-            df = df.drop(columns=["target_url"], errors="ignore")
-        # Drop columns where every row is empty / whitespace-only
-        all_blank_cols = [c for c in df.columns if df[c].map(_cell_is_blank).all()]
-        if all_blank_cols:
-            df = df.drop(columns=all_blank_cols, errors="ignore")
-    if df.empty or df.shape[1] == 0:
-        df = pd.DataFrame([{"message": "No variable data columns after cleanup"}])
+
+    headers_order: List[str] = []
+    non_blank_columns: Set[str] = set()
+    for row in iter_jsonl_rows(jsonl_path):
+        row.pop("target_url", None)
+        for key, value in row.items():
+            if key not in headers_order:
+                headers_order.append(key)
+            if not _cell_is_blank(value):
+                non_blank_columns.add(key)
+
+    selected_headers = [h for h in headers_order if h in non_blank_columns]
+    if not selected_headers:
+        selected_headers = ["message"]
+
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet(title="data")
+    ws.append(selected_headers)
+
+    if selected_headers == ["message"]:
+        ws.append(["No variable data columns after cleanup"])
+    else:
+        for row in iter_jsonl_rows(jsonl_path):
+            row.pop("target_url", None)
+            ws.append([row.get(h, "") for h in selected_headers])
+
     output_dir = os.path.dirname(output_path) or "."
     os.makedirs(output_dir, exist_ok=True)
     fd, temp_path = tempfile.mkstemp(prefix="._tmp_", suffix=".xlsx", dir=output_dir)
     os.close(fd)
     try:
-        df.to_excel(temp_path, index=False)
+        wb.save(temp_path)
         os.replace(temp_path, output_path)
     finally:
         if os.path.exists(temp_path):

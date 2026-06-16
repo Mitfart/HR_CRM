@@ -23,6 +23,65 @@ type ScriptStep = {
   question: string;
 };
 
+type HrRow = {
+  user_id: string;
+  name: string;
+  hours_estimate: number;
+  breaks_count: number;
+  touches: number;
+  applications_updates: number;
+  status_changes: number;
+  notes_updates: number;
+  candidate_actions: number;
+  calls_made: number;
+  calls_answered: number;
+  messages_answered: number;
+  responses_processed: number;
+  resumes_made: number;
+  kpi_points: number;
+  game_level: number;
+  badge: string;
+};
+
+type VacancyRow = {
+  vacancy: string;
+  applications_count: number;
+  responses_processed: number;
+  calls_made: number;
+  calls_answered: number;
+  messages_answered: number;
+  resumes_made: number;
+};
+
+type HrStatsPayload = {
+  period_days: number;
+  generated_at: string;
+  leaderboard: HrRow[];
+  vacancy_table: VacancyRow[];
+  totals: {
+    hours: number;
+    touches: number;
+    applications_updates: number;
+    status_changes: number;
+    calls_made: number;
+    messages_answered: number;
+    responses_processed: number;
+    resumes_made: number;
+  };
+};
+
+type QuestionnairesMap = Record<string, string[]>;
+
+type DeletionEvent = {
+  created_at: string;
+  actor_user_id: string | null;
+  actor_name: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  details?: Record<string, unknown>;
+};
+
 // ── Role badge ────────────────────────────────────────────────────────────────
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -363,9 +422,356 @@ function ScriptsTab() {
   );
 }
 
+function HrAnalyticsTab() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<HrStatsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadStats(period = days) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/crm/admin/hr-stats?days=${period}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("load failed");
+      setData(await res.json());
+    } catch {
+      setError("Не удалось загрузить HR-аналитику");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadStats(); }, []);
+
+  if (loading) return <p className="text-sm text-slate-500">Загрузка HR-аналитики...</p>;
+
+  return (
+    <div className="space-y-5">
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2 text-sm">{error}</div>}
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">HR Статистика и KPI</h2>
+          <p className="text-sm text-slate-500">Геймификация, производительность и касания по вакансиям</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            className="input-field text-sm py-2"
+            value={days}
+            onChange={(e) => {
+              const next = parseInt(e.target.value);
+              setDays(next);
+              loadStats(next);
+            }}
+          >
+            <option value={7}>7 дней</option>
+            <option value={14}>14 дней</option>
+            <option value={30}>30 дней</option>
+            <option value={90}>90 дней</option>
+          </select>
+          <button onClick={() => loadStats(days)} className="btn-secondary text-sm py-2 px-4">
+            Обновить
+          </button>
+        </div>
+      </div>
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">Отработано часов</p>
+              <p className="text-2xl font-semibold text-slate-800">{data.totals.hours}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">Касаний CRM</p>
+              <p className="text-2xl font-semibold text-slate-800">{data.totals.touches}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">Звонков</p>
+              <p className="text-2xl font-semibold text-slate-800">{data.totals.calls_made}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">Разобрано откликов</p>
+              <p className="text-2xl font-semibold text-slate-800">{data.totals.responses_processed}</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 border-b border-slate-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-800">Лидерборд HR (игровая мотивация)</h3>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {data.leaderboard.map((row, idx) => {
+                const maxPoints = Math.max(...data.leaderboard.map((r) => r.kpi_points), 1);
+                const progress = Math.round((row.kpi_points / maxPoints) * 100);
+                return (
+                  <div key={row.user_id} className="p-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          #{idx + 1} {row.name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Уровень {row.game_level} · Бейдж: {row.badge}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-semibold text-indigo-700">{row.kpi_points} очков</p>
+                        <p className="text-xs text-slate-500">
+                          {row.hours_estimate} ч · перерывы: {row.breaks_count}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full bg-indigo-500" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-xs min-w-[1250px]">
+              <thead className="bg-sky-100 text-slate-700">
+                <tr>
+                  <th className="text-left px-3 py-2">HR</th>
+                  <th className="text-left px-3 py-2">Часы</th>
+                  <th className="text-left px-3 py-2">Перерывы</th>
+                  <th className="text-left px-3 py-2">Касания</th>
+                  <th className="text-left px-3 py-2">Обновл. заявок</th>
+                  <th className="text-left px-3 py-2">Смена статуса</th>
+                  <th className="text-left px-3 py-2">Звонков</th>
+                  <th className="text-left px-3 py-2">Ответов на звонки</th>
+                  <th className="text-left px-3 py-2">Ответов в сообщениях</th>
+                  <th className="text-left px-3 py-2">Разобрано откликов</th>
+                  <th className="text-left px-3 py-2">Сделано резюме</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.leaderboard.map((r) => (
+                  <tr key={r.user_id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium text-slate-800">{r.name}</td>
+                    <td className="px-3 py-2">{r.hours_estimate}</td>
+                    <td className="px-3 py-2">{r.breaks_count}</td>
+                    <td className="px-3 py-2">{r.touches}</td>
+                    <td className="px-3 py-2">{r.applications_updates}</td>
+                    <td className="px-3 py-2">{r.status_changes}</td>
+                    <td className="px-3 py-2">{r.calls_made}</td>
+                    <td className="px-3 py-2">{r.calls_answered}</td>
+                    <td className="px-3 py-2">{r.messages_answered}</td>
+                    <td className="px-3 py-2">{r.responses_processed}</td>
+                    <td className="px-3 py-2">{r.resumes_made}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-xs min-w-[900px]">
+              <thead className="bg-emerald-100 text-slate-700">
+                <tr>
+                  <th className="text-left px-3 py-2">Вакансия</th>
+                  <th className="text-left px-3 py-2">Разобрано откликов</th>
+                  <th className="text-left px-3 py-2">Звонков</th>
+                  <th className="text-left px-3 py-2">Ответов на звонки</th>
+                  <th className="text-left px-3 py-2">Ответов в сообщениях</th>
+                  <th className="text-left px-3 py-2">Сделано резюме</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.vacancy_table.map((v) => (
+                  <tr key={v.vacancy} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium text-slate-800">{v.vacancy}</td>
+                    <td className="px-3 py-2">{v.responses_processed}</td>
+                    <td className="px-3 py-2">{v.calls_made}</td>
+                    <td className="px-3 py-2">{v.calls_answered}</td>
+                    <td className="px-3 py-2">{v.messages_answered}</td>
+                    <td className="px-3 py-2">{v.resumes_made}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DeletionsTab() {
+  const [items, setItems] = useState<DeletionEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/crm/deletions?scope=all&limit=500", { cache: "no-store" });
+      if (!res.ok) throw new Error("load failed");
+      setItems(await res.json());
+    } catch {
+      setError("Не удалось загрузить историю удалений");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <p className="text-sm text-slate-500">Загрузка истории удалений...</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">История удалений CRM</h2>
+          <p className="text-sm text-slate-500">Только чтение. Кто удалил и когда.</p>
+        </div>
+        <button onClick={load} className="btn-secondary text-sm py-2 px-4">Обновить</button>
+      </div>
+      {error && <div className="text-sm text-red-600">{error}</div>}
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="w-full text-sm min-w-[1100px]">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="text-left px-3 py-2">Когда</th>
+              <th className="text-left px-3 py-2">Кто</th>
+              <th className="text-left px-3 py-2">Действие</th>
+              <th className="text-left px-3 py-2">Сущность</th>
+              <th className="text-left px-3 py-2">ID</th>
+              <th className="text-left px-3 py-2">Детали</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((it, idx) => (
+              <tr key={`${it.entity_id}-${it.created_at}-${idx}`} className="hover:bg-slate-50">
+                <td className="px-3 py-2 text-slate-600">{new Date(it.created_at).toLocaleString("ru-RU")}</td>
+                <td className="px-3 py-2 text-slate-800 font-medium">{it.actor_name}</td>
+                <td className="px-3 py-2">{it.action}</td>
+                <td className="px-3 py-2">{it.entity_type}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">{it.entity_id}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">{JSON.stringify(it.details || {})}</td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-4 text-sm text-slate-400 text-center">Событий удаления пока нет.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function QuestionnairesTab() {
+  const [items, setItems] = useState<QuestionnairesMap>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [profession, setProfession] = useState("");
+  const [questionsText, setQuestionsText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/crm/admin/questionnaires", { cache: "no-store" });
+      if (!res.ok) throw new Error("load failed");
+      setItems(await res.json());
+    } catch {
+      setError("Не удалось загрузить опросники");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function save() {
+    const prof = profession.trim().toLowerCase();
+    const questions = questionsText.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (!prof || questions.length === 0) {
+      setError("Укажите профессию и минимум 1 вопрос");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/crm/admin/questionnaires", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profession: prof, questions }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      setProfession("");
+      setQuestionsText("");
+      await load();
+    } catch {
+      setError("Не удалось сохранить опросник");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+  if (loading) return <p className="text-sm text-slate-500">Загрузка AI-опросников...</p>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-800">AI-опросники по профессиям</h2>
+        <p className="text-sm text-slate-500">AI использует эти вопросы для анкетирования и авто-резюме.</p>
+      </div>
+      {error && <div className="text-sm text-red-600">{error}</div>}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <input
+          value={profession}
+          onChange={(e) => setProfession(e.target.value)}
+          className="input-field"
+          placeholder="Профессия (например: няня)"
+        />
+        <textarea
+          value={questionsText}
+          onChange={(e) => setQuestionsText(e.target.value)}
+          rows={6}
+          className="input-field resize-y"
+          placeholder={"Вопрос 1\nВопрос 2\nВопрос 3"}
+        />
+        <button onClick={save} disabled={saving} className="btn-primary text-sm py-2 px-4">
+          {saving ? "Сохранение..." : "Сохранить опросник"}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {Object.entries(items).map(([prof, qs]) => (
+          <div key={prof} className="rounded-xl border border-slate-200 p-3">
+            <p className="text-sm font-semibold text-slate-800">{prof}</p>
+            <ul className="mt-2 text-xs text-slate-600 space-y-1 list-disc pl-5">
+              {qs.map((q) => <li key={q}>{q}</li>)}
+            </ul>
+            <button
+              className="mt-2 text-xs text-indigo-600 hover:underline"
+              onClick={() => {
+                setProfession(prof);
+                setQuestionsText(qs.join("\n"));
+              }}
+            >
+              Редактировать
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = "users" | "scripts";
+type Tab = "users" | "scripts" | "hr_analytics" | "deletions" | "questionnaires";
 
 export default function AdminPanel() {
   const router = useRouter();
@@ -396,7 +802,7 @@ export default function AdminPanel() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {/* Tabs */}
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit mb-6">
-          {(["users", "scripts"] as Tab[]).map((t) => (
+          {(["users", "scripts", "questionnaires", "hr_analytics", "deletions"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -406,13 +812,29 @@ export default function AdminPanel() {
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              {t === "users" ? "Пользователи" : "Скрипты бота"}
+              {t === "users"
+                ? "Пользователи"
+                : t === "scripts"
+                  ? "Скрипты бота"
+                  : t === "questionnaires"
+                    ? "AI опросники"
+                    : t === "hr_analytics"
+                      ? "HR аналитика"
+                      : "Удаления"}
             </button>
           ))}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-6">
-          {tab === "users" ? <UsersTab /> : <ScriptsTab />}
+          {tab === "users"
+            ? <UsersTab />
+            : tab === "scripts"
+              ? <ScriptsTab />
+              : tab === "questionnaires"
+                ? <QuestionnairesTab />
+              : tab === "hr_analytics"
+                ? <HrAnalyticsTab />
+                : <DeletionsTab />}
         </div>
       </main>
     </div>

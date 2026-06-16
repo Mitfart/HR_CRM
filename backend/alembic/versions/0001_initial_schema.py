@@ -17,7 +17,7 @@ def upgrade() -> None:
     # ── Enum types ────────────────────────────────────────────────────────
     op.execute("""
         DO $$ BEGIN
-            CREATE TYPE user_role AS ENUM ('admin', 'manager');
+            CREATE TYPE user_role AS ENUM ('admin', 'manager', 'client', 'candidate');
         EXCEPTION WHEN duplicate_object THEN null; END $$
     """)
     op.execute("""

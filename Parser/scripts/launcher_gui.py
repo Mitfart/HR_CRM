@@ -9,11 +9,18 @@ import re
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+SCRAPER_MODE_FLAG = "--run-scraper"
 
 if getattr(sys, "frozen", False):
     APP_DIR = Path(sys.executable).resolve().parent
 else:
     APP_DIR = Path(__file__).resolve().parent
+
+DEFAULT_OUTPUT_FILE = (
+    Path.home() / "Downloads" / "candidates.xlsx"
+    if getattr(sys, "frozen", False)
+    else APP_DIR / "candidates.xlsx"
+)
 
 SCRAPER_FILE = APP_DIR / "web_data_extractor.py"
 
@@ -29,7 +36,7 @@ class LauncherApp:
 
         self.start_url = tk.StringVar(value="https://app.friend.work/Candidate")
         self.link_pattern = tk.StringVar(value="/Candidate/Profile")
-        self.output_file = tk.StringVar(value=str(APP_DIR / "candidates.xlsx"))
+        self.output_file = tk.StringVar(value=str(DEFAULT_OUTPUT_FILE))
         self.data_tag = tk.StringVar(value="data-autotest-id")
         self.max_pages = tk.StringVar(value="20")
 
@@ -149,14 +156,13 @@ class LauncherApp:
         if path:
             self.output_file.set(path)
 
-    def _build_command(self) -> list[str]:
+    def _build_scraper_args(self) -> list[str]:
         if not SCRAPER_FILE.exists():
-            raise FileNotFoundError(f"Scraper file not found: {SCRAPER_FILE}")
+            # In bundled app mode, scraper runs from embedded module.
+            if not getattr(sys, "frozen", False):
+                raise FileNotFoundError(f"Scraper file not found: {SCRAPER_FILE}")
 
-        command = [
-            "python",
-            "-u",
-            str(SCRAPER_FILE),
+        args = [
             "--start-url",
             self.start_url.get().strip(),
             "--link-pattern",
@@ -169,12 +175,18 @@ class LauncherApp:
 
         data_tag = self.data_tag.get().strip()
         if data_tag:
-            command.extend(["--data-tag", data_tag])
+            args.extend(["--data-tag", data_tag])
 
-        command.extend(["--wait-for-login", "--login-wait-seconds", "0"])
-        command.append("--use-system-default-browser")
+        args.extend(["--wait-for-login", "--login-wait-seconds", "0"])
+        args.append("--use-system-default-browser")
 
-        return command
+        return args
+
+    def _build_command(self) -> list[str]:
+        scraper_args = self._build_scraper_args()
+        if getattr(sys, "frozen", False):
+            return [sys.executable, SCRAPER_MODE_FLAG, *scraper_args]
+        return [sys.executable, "-u", str(SCRAPER_FILE), *scraper_args]
 
     def _validate_inputs(self) -> None:
         start_url = self.start_url.get().strip()
@@ -309,6 +321,15 @@ class LauncherApp:
 
 
 def main() -> None:
+    if SCRAPER_MODE_FLAG in sys.argv:
+        idx = sys.argv.index(SCRAPER_MODE_FLAG)
+        scraper_args = sys.argv[idx + 1 :]
+        sys.argv = ["web_data_extractor.py", *scraper_args]
+        from web_data_extractor import main as scraper_main
+
+        scraper_main()
+        return
+
     root = tk.Tk()
     app = LauncherApp(root)
     root.mainloop()

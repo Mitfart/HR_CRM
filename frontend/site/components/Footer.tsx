@@ -21,9 +21,9 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-4 text-white/90">Услуги</h4>
             <ul className="space-y-2 text-sm text-white/60">
-              {["Няни", "Домработницы", "Водители", "Повара", "Гувернантки", "Сиделки"].map((s) => (
+              {["Luxury private staff", "Няни", "Домработницы", "Водители", "Повара", "Гувернантки", "Сиделки"].map((s) => (
                 <li key={s}>
-                  <Link href="#services" className="hover:text-brand-gold transition-colors">{s}</Link>
+                  <Link href={s === "Luxury private staff" ? "/luxury" : "/#services"} className="hover:text-brand-gold transition-colors">{s}</Link>
                 </li>
               ))}
             </ul>

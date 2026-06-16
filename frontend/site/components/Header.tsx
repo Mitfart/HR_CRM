@@ -6,10 +6,11 @@ import Link from "next/link";
 import clsx from "clsx";
 
 const NAV_LINKS = [
-  { label: "О нас", href: "#about" },
-  { label: "Услуги", href: "#services" },
-  { label: "Условия", href: "#conditions" },
-  { label: "Контакты", href: "#contacts" },
+  { label: "О нас", href: "/#about" },
+  { label: "Услуги", href: "/#services" },
+  { label: "Luxury", href: "/luxury" },
+  { label: "Условия", href: "/#conditions" },
+  { label: "Контакты", href: "/#contacts" },
 ];
 
 export default function Header() {
@@ -62,7 +63,7 @@ export default function Header() {
             >
               <MessageCircle size={18} />
             </a>
-            <Link href="#form" className="btn-primary text-sm py-2.5 px-5">
+            <Link href="/#form" className="btn-primary text-sm py-2.5 px-5">
               Оставить заявку
             </Link>
             <Link
@@ -109,7 +110,7 @@ export default function Header() {
             <Phone size={15} /> +7 926 611-10-00
           </a>
           <Link
-            href="#form"
+            href="/#form"
             onClick={() => setMenuOpen(false)}
             className="btn-primary text-sm w-full text-center mt-2"
           >
